@@ -1,0 +1,57 @@
+x-elastic-env: &elastic-env
+  ELASTIC_HOST: elastic
+  ELASTIC_PORT: 9200
+
+x-redis-env: &redis-env
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+
+services:
+  fastapi:
+    build: ../../backend
+    ports:
+      - 8000:8000
+    entrypoint: >
+      sh -c "python main.py"
+    environment:
+      FASTAPI_DEBUG: True
+      <<: [*elastic-env, *redis-env]
+    depends_on:
+      elastic:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  elastic:
+    image: elasticsearch:7.17.8
+    ports:
+      - 9200:9200
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: false
+      ES_JAVA_OPTS: -Xms1024m -Xmx1024m
+    healthcheck:
+      test: curl -s http://elastic:9200 >/dev/null || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 100
+
+  redis:
+    image: redis:7.0.5
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 5s
+      retries: 100
+
+  load_elastic_data:
+    image: node:alpine3.17
+    volumes:
+      - ../data:/tmp
+    entrypoint:
+      sh -c "npm install elasticdump -g &&
+             elasticdump --input=/tmp/genres.json --output=http://elastic:9200/genres &&
+             elasticdump --input=/tmp/persons.json --output=http://elastic:9200/persons &&
+             elasticdump --input=/tmp/movies.json --output=http://elastic:9200/movies"

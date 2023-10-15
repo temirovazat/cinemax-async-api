@@ -1,0 +1,39 @@
+services:
+  fastapi:
+    image: temirovazat/async_api:1.0.0
+    env_file:
+      - ./.env
+
+  elastic:
+    image: elasticsearch:7.17.8
+    expose:
+      - 9200
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: false
+      ES_JAVA_OPTS: -Xms1024m -Xmx1024m
+
+  redis:
+    image: redis:7.0.5
+    expose:
+      - 6379
+
+  nginx:
+    image: nginx:1.23.2
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - fastapi
+
+  load_elastic_data:
+    image: node:alpine3.17
+    volumes:
+      - ./data:/tmp
+    entrypoint:
+      sh -c "npm install elasticdump -g &&
+             elasticdump --input=/tmp/genres.json --output=http://elastic:9200/genres &&
+             elasticdump --input=/tmp/persons.json --output=http://elastic:9200/persons &&
+             elasticdump --input=/tmp/movies.json --output=http://elastic:9200/movies"
